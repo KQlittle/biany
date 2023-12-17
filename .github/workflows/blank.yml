@@ -1,31 +1,62 @@
-name: Encrypt shell scripts
-
+name: Release
 on:
   push:
     branches:
       - main
-
 jobs:
-  encrypt:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
+      - name: Checkout
         uses: actions/checkout@v2
-
-      - name: Install upx
-        run: sudo apt install upx
-
-      - name: Encrypt shell scripts
+      - name: Compress shell script
         run: |
-          for arch in x86_64 armv7l arm64; do
-            arch_name=$(echo $arch | sed -e 's/_/-/g')
-            for file in $(find . -type f -name '*.sh'); do
-              upx -9 -o $file-$arch.upx $file
-            done
-          done
-
-      - name: Upload encrypted scripts to release
-        uses: actions/upload-artifact@v3
+          upx -9 -o compressed_script.sh original_script.sh
+          upx --arch x86_64 -9 -o compressed_script_x86_64.sh original_script.sh
+          upx --arch armv7l -9 -o compressed_script_armv7l.sh original_script.sh
+          upx --arch arm64 -9 -o compressed_script_arm64.sh original_script.sh
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          TOKEN: ${{ secrets.TOKEN }}
         with:
-          name: encrypted-scripts
-          path: .
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: |
+            Compressed shell scripts for x86_64, armv7l, and arm64 architectures.
+          draft: false
+          prerelease: false
+      - name: Upload Release Asset
+        id: upload-release-asset
+        uses: actions/upload-release-asset@v1
+        env:
+          TOKEN: ${{ secrets.TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./compressed_script.sh
+          asset_name: compressed_script.sh
+          asset_content_type: application/x-sh
+      - name: Upload Release Asset
+        id: upload-release-asset-x86_64
+        uses: actions/upload-release-asset@v1
+        env:
+          TOKEN: ${{ secrets.TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./compressed_script_x86_64.sh
+          asset_name: compressed_script_x86_64.sh
+          asset_content_type: application/x-sh
+      - name: Upload Release Asset
+        id: upload-release-asset-armv7l
+        uses: actions/upload-release-asset@v1
+        env:
+          TOKEN: ${{ secrets.TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./compressed_script_armv7l.sh
+          asset_name: compressed_script_armv7l.sh
+          asset_content_type: application/x-sh
+      - name: Upload Release Asset
+        id: upload-release-asset-arm64
+        uses: actions/upload-release
