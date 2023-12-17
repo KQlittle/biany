@@ -1,75 +1,60 @@
-name: Build and Release ddns.sh
+name: Build and release ddns
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
-  build:
+  build-x86_64:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Build ddns.sh
-        run: |
-          chmod +x ddns.sh
-          GOOS=linux GOARCH=amd64 go build -o ddns_linux_amd64 ddns.sh
-          GOOS=linux GOARCH=arm64 go build -o ddns_linux_arm64 ddns.sh
-          GOOS=windows GOARCH=amd64 go build -o ddns_windows_amd64.exe ddns.sh
-          GOOS=darwin GOARCH=amd64 go build -o ddns_darwin_amd64 ddns.sh
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+      - uses: actions/checkout@v2
+      - name: Install build tools
+        run: sudo apt-get install build-essential
+      - name: Compile shell script
+        run: gcc ddns.sh -o ddns_x86_64
+      - name: Upload to release
+        uses: actions/upload-artifact@v2
         with:
-          tag_name: v1.0.0
-          release_name: Release v1.0.0
-          body: |
-            This is the first release of ddns.sh.
-          draft: false
-          prerelease: false
-      - name: Upload Release Asset
-        id: upload-release-asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+          name: ddns
+          path: ddns_x86_64
+  build-amd:
+    runs-on: amd64-linux-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install build tools
+        run: sudo apt-get install build-essential
+      - name: Compile for amd64
+        run: gcc ddns.sh -o ddns_amd64
+      - name: Upload to release
+        uses: actions/upload-artifact@v2
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./ddns_linux_amd64
-          asset_name: ddns_linux_amd64
-          asset_content_type: application/octet-stream
-          asset_label: ddns_linux_amd64
-      - name: Upload Release Asset
-        id: upload-release-asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+          name: ddns
+          path: ddns_amd64
+  build-arm64:
+    runs-on: aarch64-linux-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install build tools
+        run: sudo apt-get install build-essential
+      - name: Compile shell script
+        run: gcc ddns.sh -o ddns_arm64
+      - name: Upload to release
+        uses: actions/upload-artifact@v2
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./ddns_linux_arm64
-          asset_name: ddns_linux_arm64
-          asset_content_type: application/octet-stream
-          asset_label: ddns_linux_arm64
-      - name: Upload Release Asset
-        id: upload-release-asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+          name: ddns
+          path: ddns_arm64
+  build-all:
+    runs-on: armv7l-linux-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install build tools
+        run: sudo apt-get install build-essential
+      - name: Compile for armv7l
+        run: gcc ddns.sh -o ddns_armv7l
+      - name: Upload to release
+        uses: actions/upload-artifact@v2
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./ddns_windows_amd64.exe
-          asset_name: ddns_windows_amd64.exe
-          asset_content_type: application/octet-stream
-          asset_label: ddns_windows_amd64.exe
-      - name: Upload Release Asset
-        id: upload-release-asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./ddns_darwin_amd64
-          asset_name: ddns_darwin_amd64
-          asset_content_type: application/octet-stream
-          asset_label: ddns_darwin_amd64
+          name: ddns
+          path: ddns_armv7l
