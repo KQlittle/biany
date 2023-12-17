@@ -1,4 +1,4 @@
-name: Build and release ddns
+name: Encrypt shell scripts
 
 on:
   push:
@@ -6,28 +6,26 @@ on:
       - main
 
 jobs:
-  build-all:
+  encrypt:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: ["amd64", "armv7l", "arm64"]
     steps:
-      - uses: actions/checkout@v2
-      - name: Install build tools and set script permission
-        run: sudo apt-get install build-essential qemu-aarch64-static qemu-arm-static shc && chmod +x ddns.sh
-      - name: Build for x86/amd64
-        if: "${{ matrix.arch == 'amd64' }}"
-        run: shc ddns.sh -o ddns-linux-amd64
-      - name: Build for armv7l
-        if: "${{ matrix.arch == 'armv7l' }}"
+      - name: Check out repository
+        uses: actions/checkout@v2
+
+      - name: Install upx
+        run: sudo apt install upx
+
+      - name: Encrypt shell scripts
         run: |
-          sudo qemu-arm-static -L . -static ddns.sh -o ddns-linux-armv7l
-      - name: Build for arm64
-        if: "${{ matrix.arch == 'arm64' }}"
-        run: |
-          sudo qemu-aarch64-static -L . -static ddns.sh -o ddns-linux-arm64
-      - name: Upload to release
-        uses: actions/upload-artifact@v2
+          for arch in x86_64 armv7l arm64; do
+            arch_name=$(echo $arch | sed -e 's/_/-/g')
+            for file in $(find . -type f -name '*.sh'); do
+              upx -9 -o $file-$arch.upx $file
+            done
+          done
+
+      - name: Upload encrypted scripts to release
+        uses: actions/upload-artifact@v3
         with:
-          name: ddns
-          path: ddns-linux-*
+          name: encrypted-scripts
+          path: .
