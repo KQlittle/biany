@@ -1,11 +1,11 @@
 #!/bin/bash
 
 rm -rf ip.txt ipv6.txt informlog
-config_file="/opt/config"
+config_file="/root/bianyi/config"
 
 # 检查config文件是否存在
 if [ ! -e "$config_file" ]; then
-    cat >/opt/config <<EOF
+  cat > /root/bianyi/config << EOF
 #!/bin/bash
 ###################################################################################################
 ##运行模式ipv4 or ipv6 默认为：ipv4
@@ -129,483 +129,501 @@ IPbest_txt=""
 #优选IPv4ip网页获取地址如:https://xxxxxxxxxx/ipv4.php
 IPbest_txt2=""
 EOF
-    echo "请修改文件后,重新启动"
-    exit 0
+echo "请修改文件后,重新启动"
+exit 0;
 else
     echo "config文件已存在"
 fi
 
-source /opt/config
+source /root/bianyi/config
 
 #本地IP
 if [ "$localIP" = "ture" ]; then
-    ipAddr=$(curl -s http://ip.3322.net)
+ipAddr=`curl -s http://ip.3322.net`
 fi
 
 #更新类型
-if [ "$IP_ADDR" = "ipv4" ]; then
+if [ "$IP_ADDR" = "ipv4" ] ; then
     record_type="A"
 else
     record_type="AAAA"
 fi
 
-run() {
-    if [ "$ipget" = "false" ]; then
-        echo "按要求未进行ip测速下载准备服务"
+
+run(){
+if [ "$ipget" = "false" ] ; then
+		echo "按要求未进行ip测速下载准备服务";
+else
+# 获取系统架构
+arch=$(uname -m)
+# 根据架构选择文件名
+case $arch in
+    i386) filename="CloudflareST_x86" ;;
+    aarch64) filename="CloudflareST_arm7" ;;
+    arm) filename="CloudflareST_arm64" ;;
+    x86_64) filename="CloudflareST_amd64" ;;
+    *)
+        echo "没有该系统架构运行包"
+        exit 1
+        ;;
+esac
+# 下载文件（如果文件不存在）
+if [ ! -f "$filename" ]; then
+    wget -q "https://gitee.com/wdfing/cfddns/raw/master/$filename"
+else
+    echo "$filename 已存在，无需下载"
+fi
+chmod a+x "$filename"
+wget -q $IP_txt
+wget -q $IPv6_txt
+wget -q $IPbest_txt -O - > IPlus.txt
+sed -i '/^#/d' IPlus.txt
+echo >> IPlus.txt
+wget -q $IPbest_txt2 -O - | sed 's/<br>/\n/g' >> IPlus.txt
+sed -i '/^#/d' ip.txt
+fi
+}
+
+
+closeset(){
+#读取配置文件中的客户端
+if  [ "$clien" = "6" ] ; then
+	CLIEN=bypass;
+elif  [ "$clien" = "5" ] ; then
+		CLIEN=openclash;
+elif  [ "$clien" = "4" ] ; then
+	CLIEN=clash;
+elif  [ "$clien" = "3" ] ; then
+		CLIEN=shadowsocksr;
+elif  [ "$clien" = "2" ] ; then
+			CLIEN=passwall2;
+			else
+			CLIEN=passwall;
+fi
+#判断是否停止科学上网服务
+if [ "$pause" = "false" ] ; then
+	echo "按要求未停止科学上网服务";
+else
+	/etc/init.d/$CLIEN stop;
+	echo "已停止$CLIEN";
+fi
+}
+
+openset(){
+if [ "$pause" = "false" ] ; then
+		echo "按要求未重启科学上网服务";
+		sleep 3s;
+else
+		/etc/init.d/$CLIEN restart;
+		echo "已重启$CLIEN";
+		echo "为保证cloudflareAPI连接正常 将在30秒后开始更新域名解析";
+		sleep 3s;
+fi
+}
+
+
+cf_ip_speed(){
+if [ "$CloudflareST_speed" = "false" ] ; then
+	echo "按要求未进行CFIP测速";
+else
+if [ "$cf" = "ture" ] ; then
+    CFIPget=${hostname[$x]};
+    listDnsipget="https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?type=${record_type}&name=${CFIPget}";
+    res234=$(curl -s -X GET "$listDnsipget" -H "X-Auth-Email:$x_email" -H "X-Auth-Key:$api_key" -H "Content-Type:application/json");
+    CFIP2=$(echo "$res234" | jq -r ".result[0].content");
+    echo >> IPlus.txt
+    echo -e "$CFIP2\n" >> IPlus.txt
+    echo "CFDNSIP获取成功：$CFIP2"
+fi
+if [ "$ali" = "ture" ] ; then
+
+urlencode() {
+    local string="$1"
+    echo -n "$string" | jq -s -R -r @uri
+}
+# 发送请求函数
+send_request() {
+    local action="$1"
+    local params="$2"
+    local args="AccessKeyId=$AliDDNS_AK&Action=$action&Format=json&$params&Version=2015-01-09"
+    local hash=$(echo -n "GET&%2F&$(urlencode "$args")" | openssl dgst -sha1 -hmac "$AliDDNS_SK&" -binary | openssl base64)
+    curl -s "https://alidns.cn-hangzhou.aliyuncs.com/?$args&Signature=$(urlencode "$hash")"
+}
+
+get_ip() {
+    grep '"Value"' | jq -r '.DomainRecords.Record[].Value'
+}
+
+# 请求记录值 (RecordID)
+query_recordid() {
+    send_request "DescribeSubDomainRecords&DomainName=$AliDDNS_DomainName" "RR=$AliDDNS_SubDomainName&SignatureMethod=HMAC-SHA1&SignatureNonce=$timestamp&SignatureVersion=1.0&SubDomain=$AliDDNS_SubDomainName.$AliDDNS_DomainName&Timestamp=$timestamp&Type=$record_type"
+}
+
+    timestamp=`date -u "+%Y-%m-%dT%H%%3A%M%%3A%SZ"`
+    AliIP2=`query_recordid A | get_ip`
+    echo >> IPlus.txt
+    echo -e "$AliIP2\n" >> IPlus.txt
+    echo "AliDNSIP获取成功：$AliIP2"
+fi
+
+if [ "$DNSpod" = "ture" ] ; then
+domainipget=$(curl -s https://dnsapi.cn/Domain.List -d "login_token=$ID,$TOKEN" | jq -r '.domains[] | select(.punycode == "'$domain'")'  | jq .id)
+recordipget=$(curl -s https://dnsapi.cn/Record.List -d "login_token=$ID,$TOKEN&domain_id=$domainipget"  | jq -r '.records[] | select(.name == "'$sub_domain'")' | jq -r '. | select(.type == "A")' | jq .id)
+recordidget=$(echo $recordipget | sed 's/\"//g')
+DNSpodIP2=`curl -s https://dnsapi.cn/Record.Info -d "login_token=$ID,$TOKEN&format=json&domain_id=${domainipget}&record_id=${recordidget}&remark="|awk -F '"value"' '{print $2}'|awk -F "\"" '{print $2}'`
+echo >> IPlus.txt
+echo -e "$DNSpodIP2\n" >> IPlus.txt
+echo "DNSpodDNSIP获取成功：$DNSpodIP2"
+fi
+
+#获取域名填写数量
+num=${#hostname[*]};
+#判断优选ip数量是否大于域名数，小于则让优选数与域名数相同
+if [ "$CFST_DN" -le $num ] ; then
+	CFST_DN=$num;
+fi
+CFST_P=$CFST_DN;
+#判断工作模式
+if [ "$IP_ADDR" = "ipv6" ] ; then
+    if [ ! -f "ipv6.txt" ]; then
+        echo "当前工作模式为ipv6，请配置ipv6.txt下载链接";
+        exit 2;
+
+        else
+            echo "当前工作模式为ipv6";
+    fi
     else
-        # 获取系统架构
-        arch=$(uname -m)
-        # 根据架构选择文件名
-        case $arch in
-        x86_64) filename="CloudflareST_x86" ;;
-        aarch64) filename="CloudflareST_arm7" ;;
-        arm) filename="CloudflareST_arm64" ;;
-        amd64) filename="CloudflareST_amd64" ;;
-        *)
-            echo "没有该系统架构运行包"
+        echo "当前工作模式为ipv4";
+fi
+
+#判断是否配置测速地址 
+if [[ "$CFST_URL" == http* ]] ; then
+	CFST_URL_R="-url $CFST_URL";
+else
+	CFST_URL_R="";
+fi
+
+
+if [ "$IP_ADDR" = "ipv6" ] ; then
+    #开始优选IPv6
+    ./$filename $CFST_URL_R -t $CFST_T -n $CFST_N -dn $CFST_DN -tl $CFST_TL -tll $CFST_TLL -sl $CFST_SL -p $CFST_P -f ipv6.txt
+    else
+    #开始优选IPv4
+    ./$filename $CFST_URL_R -t $CFST_T -n $CFST_N -dn $CFST_DN -tl $CFST_TL -tll $CFST_TLL -sl $CFST_SL -p $CFST_P 
+fi
+echo "测速完毕";
+
+#在次优选
+#将新旧IP写入文件
+echo "二次对比优选";
+IP1=$(sed -n "$((x + 2)),1p" result.csv | awk -F, '{print $1}');
+echo >> IPlus.txt
+echo -e "$IP1\n" >> IPlus.txt
+
+if [ "$IP_ADDR" = "ipv6" ] ; then
+#开始优选IPv6
+./$filename $CFST_URL_R -f ipv6.txt -sl $CFST_SL -o $CFST_CSV2
+else
+#开始优选IPv4
+./$filename $CFST_URL_R -f IPlus.txt -sl $CFST_SL -o $CFST_CSV2
+fi
+#获取优选后的ip地址
+ipAddr=$(sed -n "$((x + 2)),1p" $CFST_CSV2 | awk -F, '{print $1}');
+fi
+}
+
+cf_ip_ddns(){
+if [ "$cf" = "false" ] ; then
+	echo "按要求未进行CF-IP推送";
+else
+#开始循环
+echo "开始更新CF域名......";
+CDNhostname=${hostname[$x]};
+#调取CFAPI
+listDnsApi="https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?type=${record_type}&name=${CDNhostname}";
+createDnsApi="https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records";
+
+res=$(curl -s -X GET "$listDnsApi" -H "X-Auth-Email:$x_email" -H "X-Auth-Key:$api_key" -H "Content-Type:application/json");
+recordId=$(echo "$res" | jq -r ".result[0].id");
+recordIp=$(echo "$res" | jq -r ".result[0].content");
+#默认关闭小云朵
+proxy="false";
+#验证cf账号信息是否正确
+res=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${zone_id}" -H "X-Auth-Email:$x_email" -H "X-Auth-Key:$api_key" -H "Content-Type:application/json");
+resSuccess=$(echo "$res" | jq -r ".success");
+if [[ $resSuccess != "true" ]]; then
+    pushmessage="登陆错误,检查cloudflare账号信息填写是否正确！"
+    Tg_push_IP;
+    exit 1;
+fi
+#开始DDNS
+if [[ $recordIp = "$ipAddr" ]]; then
+echo -e "----->CFIP未更新<------\n获取IP与云端相同\n域名：$CDNhostname\n原IP：$recordIp" >> informlog;
+echo "未更新"
+else
+if [[ $recordId = "null" ]]; then
+    res=$(curl -s -X POST "$createDnsApi" -H "X-Auth-Email:$x_email" -H "X-Auth-Key:$api_key" -H "Content-Type:application/json" --data "{\"type\":\"$record_type\",\"name\":\"$CDNhostname\",\"content\":\"$ipAddr\",\"proxied\":$proxy}");
+    resSuccess=$(echo "$res" | jq -r ".success");
+else
+    updateDnsApi="https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${recordId}";
+    res=$(curl -s -X PUT "$updateDnsApi"  -H "X-Auth-Email:$x_email" -H "X-Auth-Key:$api_key" -H "Content-Type:application/json" --data "{\"type\":\"$record_type\",\"name\":\"$CDNhostname\",\"content\":\"$ipAddr\",\"proxied\":$proxy}");
+    resSuccess=$(echo "$res" | jq -r ".success");
+fi
+
+# 调用CFAPI检查是否更新成功
+listDnsApi1="https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?type=${record_type}&name=${CDNhostname}";
+createDnsApi1="https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records";
+
+res1=$(curl -s -X GET "$listDnsApi1" -H "X-Auth-Email:$x_email" -H "X-Auth-Key:$api_key" -H "Content-Type:application/json");
+recordId1=$(echo "$res1" | jq -r ".result[0].id");
+recordIp1=$(echo "$res1" | jq -r ".result[0].content");
+
+if [[ $recordIp1 = "$ipAddr" ]]; then
+    echo -e "----->CF更新成功<------\n域名：$CDNhostname\n原IP：$recordIp\n新IP：$ipAddr" >> informlog;
+    echo "更新成功"
+else
+    echo -e "----->CF更新失败<------\n域名：$CDNhostname" >> informlog;
+    echo "更新失败,请检查网络，账户以及账户秘钥，配置是否正确！！！"
+fi
+fi
+fi
+}
+
+ali_ip_ddns(){
+if [ "$ali" = "false" ] ; then
+    echo "按要求未进行ali推送"
+else
+    echo "开始更新ali域名......"
+    sleep 3
+
+eqold6=0
+eqold4=0
+ALiDom="$AliDDNS_SubDomainName.$AliDDNS_DomainName"
+AliDDNS_LocalIP4=$ipAddr
+AliDDNS_LocalIP6=$ipAddr
+
+urlencode() {
+    local string="$1"
+    echo -n "$string" | jq -s -R -r @uri
+}
+# 发送请求函数
+send_request() {
+    local action="$1"
+    local params="$2"
+    local args="AccessKeyId=$AliDDNS_AK&Action=$action&Format=json&$params&Version=2015-01-09"
+    local hash=$(echo -n "GET&%2F&$(urlencode "$args")" | openssl dgst -sha1 -hmac "$AliDDNS_SK&" -binary | openssl base64)
+    curl -s "https://alidns.cn-hangzhou.aliyuncs.com/?$args&Signature=$(urlencode "$hash")"
+}
+
+# 获取记录值 (RecordID)
+get_recordid() {
+    grep -Eo '"RecordId":"[0-9]+"' | cut -d':' -f2 | tr -d '"'
+}
+
+get_ip() {
+    grep '"Value"' | jq -r '.DomainRecords.Record[].Value'
+}
+
+# 请求记录值 (RecordID)
+query_recordid() {
+    send_request "DescribeSubDomainRecords&DomainName=$AliDDNS_DomainName" "RR=$AliDDNS_SubDomainName&SignatureMethod=HMAC-SHA1&SignatureNonce=$timestamp&SignatureVersion=1.0&SubDomain=$ALiDom&Timestamp=$timestamp&Type=$record_type"
+}
+
+# 更新记录值 (RecordID)
+update_record() {
+    send_request "UpdateDomainRecord&DomainName=$AliDDNS_DomainName" "RR=$AliDDNS_SubDomainName&RecordId=$3&SignatureMethod=HMAC-SHA1&SignatureNonce=$timestamp&SignatureVersion=1.0&TTL=$AliDDNS_TTL&Timestamp=$timestamp&Type=$record_type&Value=$(urlencode "$2")"
+}
+
+
+# 添加记录值 (RecordID)
+add_record() {
+    send_request "AddDomainRecord&DomainName=$AliDDNS_DomainName" "RR=$AliDDNS_SubDomainName&SignatureMethod=HMAC-SHA1&SignatureNonce=$timestamp&SignatureVersion=1.0&TTL=$AliDDNS_TTL&Timestamp=$timestamp&Type=$record_type&Value=$(urlencode "$2")"
+}
+
+
+
+if [ "$record_type" = "A" ]
+then
+timestamp=`date -u "+%Y-%m-%dT%H%%3A%M%%3A%SZ"`
+AliDDNS_DomainIP4=`query_recordid A | get_ip`
+#echo "Ali解析IP：$AliDDNS_DomainIP4"
+if [ "$AliDDNS_LocalIP4" = "$AliDDNS_DomainIP4" ]
+then
+echo -e "----->Ali未更新<------\n获取IP与云端相同\n域名：$ALiDom\n原IP：$AliDDNS_DomainIP4" >> informlog;
+echo "未更新"
+eqold4=0
+else
+eqold4=1
+fi
+else
+timestamp=`date -u "+%Y-%m-%dT%H%%3A%M%%3A%SZ"`
+AliDDNS_DomainIP6=`query_recordid AAAA | get_ip`
+echo "Ali解析IP：$AliDDNS_DomainIP6"
+if [ "$AliDDNS_LocalIP6" = "$AliDDNS_DomainIP6" ]
+then
+echo -e "----->Ali未更新<------\n获取IP与云端相同\n域名：$ALiDom\n原IP：$AliDDNS_DomainIP6" >> informlog;
+echo "未更新"
+eqold6=0
+else
+eqold6=1
+fi
+
+fi
+
+
+if [ $eqold4 -eq 1 ];then
+timestamp=`date -u "+%Y-%m-%dT%H%%3A%M%%3A%SZ"`
+   # 判断RecordIP是否为空
+   if [ "$AliDDNS_RecordID4" = "" ]
+   then
+       AliDDNS_RecordID4=`query_recordid A | get_recordid`
+   fi
+
+   if [ "$AliDDNS_RecordID4" = "" ]
+   then
+       AliDDNS_RecordID4=`add_record A $AliDDNS_LocalIP4 | get_recordid`
+#       echo "[$(date "+%G/%m/%d %H:%M:%S")] Added RecordID4 : $AliDDNS_RecordID4"
+#        echo "Added RecordID4 : $AliDDNS_RecordID4\n"
+        
+   else
+       newA=`update_record A $AliDDNS_LocalIP4 $AliDDNS_RecordID4`
+#       echo "[$(date "+%G/%m/%d %H:%M:%S")] Updated RecordID4 : $AliDDNS_RecordID4"
+#        echo "Updated RecordID4 : $AliDDNS_RecordID4"
+   fi
+   
+    timestamp=`date -u "+%Y-%m-%dT%H%%3A%M%%3A%SZ"`
+    Ali_newip=`query_recordid A | get_ip`
+   # 输出最终结果
+   if [ "$Ali_newip" != "$AliDDNS_LocalIP4" ]; then
+       # 输出失败结果 (因为没有获取到RecordID)
+       echo -e "----->Ali更新失败<------\n未获取到RecordID\n域名：$ALiDom" >> informlog;
+       echo "更新失败,请检查网络，账户以及账户秘钥，配置是否正确！！！"
+   else
+       # 输出成功结果
+       echo -e "----->Ali更新成功<------\n域名：$ALiDom\n原IP：$AliDDNS_DomainIP4\n新IP：$AliDDNS_LocalIP4" >> informlog;
+       echo "更新成功"
+   fi
+fi
+if [ $eqold6 -eq 1 ];then
+timestamp=`date -u "+%Y-%m-%dT%H%%3A%M%%3A%SZ"`
+   # 判断RecordIP是否为空
+   if [ "$AliDDNS_RecordID6" = "" ]
+   then
+       AliDDNS_RecordID6=`query_recordid AAAA | get_recordid`
+   fi
+   
+   if [ "$AliDDNS_RecordID6" = "" ]
+   then
+       AliDDNS_RecordID6=`add_record AAAA $AliDDNS_LocalIP6 | get_recordid`
+#echo "[$(date "+%G/%m/%d %H:%M:%S")] Added RecordID : $AliDDNS_RecordID6"
+#        echo "Added RecordID : $AliDDNS_RecordID6"
+   else
+       newAAAA=`update_record AAAA $AliDDNS_LocalIP6 $AliDDNS_RecordID6`
+#echo "[$(date "+%G/%m/%d %H:%M:%S")] Updated RecordID6 : $AliDDNS_RecordID6"
+        echo "Updated RecordID6 : $AliDDNS_RecordID6"
+   fi
+    timestamp=`date -u "+%Y-%m-%dT%H%%3A%M%%3A%SZ"`
+    Ali_newipv6=`query_recordid AAAA | get_ip`
+   # 输出最终结果
+   if [ "$Ali_newipv6" != "$AliDDNS_LocalIP6" ]; then
+       # 输出失败结果 (因为没有获取到RecordID)
+      echo -e "----->Ali更新失败<------\n未获取到RecordID\n域名：$ALiDom" >> informlog;
+      echo "更新失败,请检查网络，账户以及账户秘钥，配置是否正确！！！"
+   else
+       # 输出成功结果
+       echo -e "----->Ali更新成功<------\n域名：$ALiDom\n原IP：$AliDDNS_DomainIP6\n新IP：$AliDDNS_LocalIP6" >> informlog;
+       echo "更新成功"
+   fi
+fi
+fi
+}
+
+
+dnspod_ip_ddns(){
+if [ "$DNSpod" = "false" ] ; then
+    echo "按要求未进行dnspod推送"
+else
+echo "开始更新DNSpod域名......"
+sleep 3;
+if [ "$sub_domain" = "@" ];then
+	HOST=$domain
+else
+    HOST=$sub_domain.$domain
+fi
+
+ip_addr_local=$ipAddr
+domain_id=$(curl -s https://dnsapi.cn/Domain.List -d "login_token=$ID,$TOKEN" | jq -r '.domains[] | select(.punycode == "'$domain'")'  | jq .id)
+#echo "取得domain_id : $domain_id"
+#获取recordid
+record_id_tmp=$(curl -s https://dnsapi.cn/Record.List -d "login_token=$ID,$TOKEN&domain_id=$domain_id"  | jq -r '.records[] | select(.name == "'$sub_domain'")' | jq -r '. | select(.type == "A")' | jq .id)
+#此处为查询根域名@ 且类型为A记录的域名 record id
+record_id=$(echo $record_id_tmp | sed 's/\"//g')
+#echo "取得$sub_domain域名record_id : $record_id"
+ip_addr_dns=`curl -s https://dnsapi.cn/Record.Info -d "login_token=$ID,$TOKEN&format=json&domain_id=${domain_id}&record_id=${record_id}&remark="|awk -F '"value"' '{print $2}'|awk -F "\"" '{print $2}'`
+#echo "DNSpod解析IP:$ip_addr_dns"
+if [ "$ip_addr_local" = "$ip_addr_dns" ]
+then
+echo -e "----->DNSpodIP未更新<------\n获取IP与云端相同\n域名：$HOST\n原IP：$ip_addr_dns" >> informlog;
+echo "未更新"
+else
+ret_code=`curl -s https://dnsapi.cn/Record.Modify -d "login_token=$ID,$TOKEN&format=json&domain_id=${domain_id}&record_id=${record_id}&record_type=${record_type}&record_line=默认&ttl=${DNSpod_TTL}&sub_domain=${sub_domain}&value=${ip_addr_local}&mx=0"|awk -F '"code"' '{print $2}'|awk -F "\"" '{print $2}'`
+# echo $ret_code
+if [ "$ret_code" = "1" ]
+    then
+        echo -e "----->DNSpod更新成功<------\n域名：$HOST\n原IP：$ip_addr_dns\n新IP：$ip_addr_local" >> informlog;
+        echo "更新成功"
+    else
+        echo -e "----->DNSpod更新失败<------\n域名：$HOST" >> informlog;
+        echo "更新失败,请检查网络，账户以及账户秘钥，配置是否正确！！！"
+    fi
+fi
+fi
+}
+
+Tg_push_IP(){
+if [ "$tg" = "false" ] ; then
+	echo "按要求未进行tg推送";
+else
+pushmessage=$(cat informlog);
+echo "即将开始推送"
+sleep 3;
+[ "$telegramlink" = "" ] && telegramlink=api.telegram.org
+echo $pushmessage
+message_text=$pushmessage
+#解析模式，可选HTML或Markdown
+# MODE='HTML'
+#api接口
+URL="https://${telegramlink}/bot${telegramBotToken}/sendMessage"
+
+if [[ -z ${telegramBotToken} ]]; then
+   echo "未配置 TG 推送"
+else
+   retry_count=0
+   while true; do
+      # 发送消息
+      res=$(timeout 20s curl -s -X POST $URL -d chat_id=${telegramBotUserId} -d text="${message_text}")
+      if [ $? == 124 ]; then
+         echo 'TG API 请求超时，请检查网络是否重启完成并是否能够访问 TG'          
+         exit 1
+      fi
+      # 解析响应
+      resSuccess521=$(echo "$res" | jq -r ".ok")
+      if [[ $resSuccess521 = "true" ]]; then
+         echo "TG 推送成功"
+         break
+      else
+         ((retry_count++))
+         if [ $retry_count -ge 5 ]; then
+            echo "TG 推送失败，已重试 $retry_count 次，请检查 TG 机器人 token 和 ID"
             exit 1
-            ;;
-        esac
-        # 下载文件（如果文件不存在）
-        if [ ! -f "$filename" ]; then
-            wget -q "https://gitee.com/wdfing/cfddns/raw/master/$filename"
-        else
-            echo "$filename 已存在，无需下载"
-        fi
-        chmod a+x "$filename"
-        wget -q $IP_txt
-        wget -q $IPv6_txt
-        wget -q $IPbest_txt -O - >IPlus.txt
-        sed -i '/^#/d' IPlus.txt
-        echo >>IPlus.txt
-        wget -q $IPbest_txt2 -O - | sed 's/<br>/\n/g' >>IPlus.txt
-        sed -i '/^#/d' ip.txt
-    fi
-}
-
-closeset() {
-    #读取配置文件中的客户端
-    if [ "$clien" = "6" ]; then
-        CLIEN=bypass
-    elif [ "$clien" = "5" ]; then
-        CLIEN=openclash
-    elif [ "$clien" = "4" ]; then
-        CLIEN=clash
-    elif [ "$clien" = "3" ]; then
-        CLIEN=shadowsocksr
-    elif [ "$clien" = "2" ]; then
-        CLIEN=passwall2
-    else
-        CLIEN=passwall
-    fi
-    #判断是否停止科学上网服务
-    if [ "$pause" = "false" ]; then
-        echo "按要求未停止科学上网服务"
-    else
-        /etc/init.d/$CLIEN stop
-        echo "已停止$CLIEN"
-    fi
-}
-
-openset() {
-    if [ "$pause" = "false" ]; then
-        echo "按要求未重启科学上网服务"
-        sleep 3s
-    else
-        /etc/init.d/$CLIEN restart
-        echo "已重启$CLIEN"
-        echo "为保证cloudflareAPI连接正常 将在30秒后开始更新域名解析"
-        sleep 3s
-    fi
-}
-
-cf_ip_speed() {
-    if [ "$CloudflareST_speed" = "false" ]; then
-        echo "按要求未进行CFIP测速"
-    else
-        if [ "$cf" = "ture" ]; then
-            CFIPget=${hostname[$x]}
-            listDnsipget="https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?type=${record_type}&name=${CFIPget}"
-            res234=$(curl -s -X GET "$listDnsipget" -H "X-Auth-Email:$x_email" -H "X-Auth-Key:$api_key" -H "Content-Type:application/json")
-            CFIP2=$(echo "$res234" | jq -r ".result[0].content")
-            echo >>IPlus.txt
-            echo -e "$CFIP2\n" >>IPlus.txt
-            echo "CFDNSIP获取成功：$CFIP2"
-        fi
-        if [ "$ali" = "ture" ]; then
-
-            urlencode() {
-                local string="$1"
-                echo -n "$string" | jq -s -R -r @uri
-            }
-            # 发送请求函数
-            send_request() {
-                local action="$1"
-                local params="$2"
-                local args="AccessKeyId=$AliDDNS_AK&Action=$action&Format=json&$params&Version=2015-01-09"
-                local hash=$(echo -n "GET&%2F&$(urlencode "$args")" | openssl dgst -sha1 -hmac "$AliDDNS_SK&" -binary | openssl base64)
-                curl -s "https://alidns.cn-hangzhou.aliyuncs.com/?$args&Signature=$(urlencode "$hash")"
-            }
-
-            get_ip() {
-                grep '"Value"' | jq -r '.DomainRecords.Record[].Value'
-            }
-
-            # 请求记录值 (RecordID)
-            query_recordid() {
-                send_request "DescribeSubDomainRecords&DomainName=$AliDDNS_DomainName" "RR=$AliDDNS_SubDomainName&SignatureMethod=HMAC-SHA1&SignatureNonce=$timestamp&SignatureVersion=1.0&SubDomain=$AliDDNS_SubDomainName.$AliDDNS_DomainName&Timestamp=$timestamp&Type=$record_type"
-            }
-
-            timestamp=$(date -u "+%Y-%m-%dT%H%%3A%M%%3A%SZ")
-            AliIP2=$(query_recordid A | get_ip)
-            echo >>IPlus.txt
-            echo -e "$AliIP2\n" >>IPlus.txt
-            echo "AliDNSIP获取成功：$AliIP2"
-        fi
-
-        if [ "$DNSpod" = "ture" ]; then
-            domainipget=$(curl -s https://dnsapi.cn/Domain.List -d "login_token=$ID,$TOKEN" | jq -r '.domains[] | select(.punycode == "'$domain'")' | jq .id)
-            recordipget=$(curl -s https://dnsapi.cn/Record.List -d "login_token=$ID,$TOKEN&domain_id=$domainipget" | jq -r '.records[] | select(.name == "'$sub_domain'")' | jq -r '. | select(.type == "A")' | jq .id)
-            recordidget=$(echo $recordipget | sed 's/\"//g')
-            DNSpodIP2=$(curl -s https://dnsapi.cn/Record.Info -d "login_token=$ID,$TOKEN&format=json&domain_id=${domainipget}&record_id=${recordidget}&remark=" | awk -F '"value"' '{print $2}' | awk -F "\"" '{print $2}')
-            echo >>IPlus.txt
-            echo -e "$DNSpodIP2\n" >>IPlus.txt
-            echo "DNSpodDNSIP获取成功：$DNSpodIP2"
-        fi
-
-        #获取域名填写数量
-        num=${#hostname[*]}
-        #判断优选ip数量是否大于域名数，小于则让优选数与域名数相同
-        if [ "$CFST_DN" -le $num ]; then
-            CFST_DN=$num
-        fi
-        CFST_P=$CFST_DN
-        #判断工作模式
-        if [ "$IP_ADDR" = "ipv6" ]; then
-            if [ ! -f "ipv6.txt" ]; then
-                echo "当前工作模式为ipv6，请配置ipv6.txt下载链接"
-                exit 2
-
-            else
-                echo "当前工作模式为ipv6"
-            fi
-        else
-            echo "当前工作模式为ipv4"
-        fi
-
-        #判断是否配置测速地址
-        if [[ "$CFST_URL" == http* ]]; then
-            CFST_URL_R="-url $CFST_URL"
-        else
-            CFST_URL_R=""
-        fi
-
-        if [ "$IP_ADDR" = "ipv6" ]; then
-            #开始优选IPv6
-            ./$filename $CFST_URL_R -t $CFST_T -n $CFST_N -dn $CFST_DN -tl $CFST_TL -tll $CFST_TLL -sl $CFST_SL -p $CFST_P -f ipv6.txt
-        else
-            #开始优选IPv4
-            ./$filename $CFST_URL_R -t $CFST_T -n $CFST_N -dn $CFST_DN -tl $CFST_TL -tll $CFST_TLL -sl $CFST_SL -p $CFST_P
-        fi
-        echo "测速完毕"
-
-        #在次优选
-        #将新旧IP写入文件
-        echo "二次对比优选"
-        IP1=$(sed -n "$((x + 2)),1p" result.csv | awk -F, '{print $1}')
-        echo >>IPlus.txt
-        echo -e "$IP1\n" >>IPlus.txt
-
-        if [ "$IP_ADDR" = "ipv6" ]; then
-            #开始优选IPv6
-            ./$filename $CFST_URL_R -f ipv6.txt -sl $CFST_SL -o $CFST_CSV2
-        else
-            #开始优选IPv4
-            ./$filename $CFST_URL_R -f IPlus.txt -sl $CFST_SL -o $CFST_CSV2
-        fi
-        #获取优选后的ip地址
-        ipAddr=$(sed -n "$((x + 2)),1p" $CFST_CSV2 | awk -F, '{print $1}')
-    fi
-}
-
-cf_ip_ddns() {
-    if [ "$cf" = "false" ]; then
-        echo "按要求未进行CF-IP推送"
-    else
-        #开始循环
-        echo "开始更新CF域名......"
-        CDNhostname=${hostname[$x]}
-        #调取CFAPI
-        listDnsApi="https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?type=${record_type}&name=${CDNhostname}"
-        createDnsApi="https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records"
-
-        res=$(curl -s -X GET "$listDnsApi" -H "X-Auth-Email:$x_email" -H "X-Auth-Key:$api_key" -H "Content-Type:application/json")
-        recordId=$(echo "$res" | jq -r ".result[0].id")
-        recordIp=$(echo "$res" | jq -r ".result[0].content")
-        #默认关闭小云朵
-        proxy="false"
-        #验证cf账号信息是否正确
-        res=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${zone_id}" -H "X-Auth-Email:$x_email" -H "X-Auth-Key:$api_key" -H "Content-Type:application/json")
-        resSuccess=$(echo "$res" | jq -r ".success")
-        if [[ $resSuccess != "true" ]]; then
-            pushmessage="登陆错误,检查cloudflare账号信息填写是否正确！"
-            Tg_push_IP
-            exit 1
-        fi
-        #开始DDNS
-        if [[ $recordIp = "$ipAddr" ]]; then
-            echo -e "----->CFIP未更新<------\n获取IP与云端相同\n域名：$CDNhostname\n原IP：$recordIp" >>informlog
-            echo "未更新"
-        else
-            if [[ $recordId = "null" ]]; then
-                res=$(curl -s -X POST "$createDnsApi" -H "X-Auth-Email:$x_email" -H "X-Auth-Key:$api_key" -H "Content-Type:application/json" --data "{\"type\":\"$record_type\",\"name\":\"$CDNhostname\",\"content\":\"$ipAddr\",\"proxied\":$proxy}")
-                resSuccess=$(echo "$res" | jq -r ".success")
-            else
-                updateDnsApi="https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${recordId}"
-                res=$(curl -s -X PUT "$updateDnsApi" -H "X-Auth-Email:$x_email" -H "X-Auth-Key:$api_key" -H "Content-Type:application/json" --data "{\"type\":\"$record_type\",\"name\":\"$CDNhostname\",\"content\":\"$ipAddr\",\"proxied\":$proxy}")
-                resSuccess=$(echo "$res" | jq -r ".success")
-            fi
-
-            # 调用CFAPI检查是否更新成功
-            listDnsApi1="https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?type=${record_type}&name=${CDNhostname}"
-            createDnsApi1="https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records"
-
-            res1=$(curl -s -X GET "$listDnsApi1" -H "X-Auth-Email:$x_email" -H "X-Auth-Key:$api_key" -H "Content-Type:application/json")
-            recordId1=$(echo "$res1" | jq -r ".result[0].id")
-            recordIp1=$(echo "$res1" | jq -r ".result[0].content")
-
-            if [[ $recordIp1 = "$ipAddr" ]]; then
-                echo -e "----->CF更新成功<------\n域名：$CDNhostname\n原IP：$recordIp\n新IP：$ipAddr" >>informlog
-                echo "更新成功"
-            else
-                echo -e "----->CF更新失败<------\n域名：$CDNhostname" >>informlog
-                echo "更新失败,请检查网络，账户以及账户秘钥，配置是否正确！！！"
-            fi
-        fi
-    fi
-}
-
-ali_ip_ddns() {
-    if [ "$ali" = "false" ]; then
-        echo "按要求未进行ali推送"
-    else
-        echo "开始更新ali域名......"
-        sleep 3
-
-        eqold6=0
-        eqold4=0
-        ALiDom="$AliDDNS_SubDomainName.$AliDDNS_DomainName"
-        AliDDNS_LocalIP4=$ipAddr
-        AliDDNS_LocalIP6=$ipAddr
-
-        urlencode() {
-            local string="$1"
-            echo -n "$string" | jq -s -R -r @uri
-        }
-        # 发送请求函数
-        send_request() {
-            local action="$1"
-            local params="$2"
-            local args="AccessKeyId=$AliDDNS_AK&Action=$action&Format=json&$params&Version=2015-01-09"
-            local hash=$(echo -n "GET&%2F&$(urlencode "$args")" | openssl dgst -sha1 -hmac "$AliDDNS_SK&" -binary | openssl base64)
-            curl -s "https://alidns.cn-hangzhou.aliyuncs.com/?$args&Signature=$(urlencode "$hash")"
-        }
-
-        # 获取记录值 (RecordID)
-        get_recordid() {
-            grep -Eo '"RecordId":"[0-9]+"' | cut -d':' -f2 | tr -d '"'
-        }
-
-        get_ip() {
-            grep '"Value"' | jq -r '.DomainRecords.Record[].Value'
-        }
-
-        # 请求记录值 (RecordID)
-        query_recordid() {
-            send_request "DescribeSubDomainRecords&DomainName=$AliDDNS_DomainName" "RR=$AliDDNS_SubDomainName&SignatureMethod=HMAC-SHA1&SignatureNonce=$timestamp&SignatureVersion=1.0&SubDomain=$ALiDom&Timestamp=$timestamp&Type=$record_type"
-        }
-
-        # 更新记录值 (RecordID)
-        update_record() {
-            send_request "UpdateDomainRecord&DomainName=$AliDDNS_DomainName" "RR=$AliDDNS_SubDomainName&RecordId=$3&SignatureMethod=HMAC-SHA1&SignatureNonce=$timestamp&SignatureVersion=1.0&TTL=$AliDDNS_TTL&Timestamp=$timestamp&Type=$record_type&Value=$(urlencode "$2")"
-        }
-
-        # 添加记录值 (RecordID)
-        add_record() {
-            send_request "AddDomainRecord&DomainName=$AliDDNS_DomainName" "RR=$AliDDNS_SubDomainName&SignatureMethod=HMAC-SHA1&SignatureNonce=$timestamp&SignatureVersion=1.0&TTL=$AliDDNS_TTL&Timestamp=$timestamp&Type=$record_type&Value=$(urlencode "$2")"
-        }
-
-        if [ "$record_type" = "A" ]; then
-            timestamp=$(date -u "+%Y-%m-%dT%H%%3A%M%%3A%SZ")
-            AliDDNS_DomainIP4=$(query_recordid A | get_ip)
-            #echo "Ali解析IP：$AliDDNS_DomainIP4"
-            if [ "$AliDDNS_LocalIP4" = "$AliDDNS_DomainIP4" ]; then
-                echo -e "----->Ali未更新<------\n获取IP与云端相同\n域名：$ALiDom\n原IP：$AliDDNS_DomainIP4" >>informlog
-                echo "未更新"
-                eqold4=0
-            else
-                eqold4=1
-            fi
-        else
-            timestamp=$(date -u "+%Y-%m-%dT%H%%3A%M%%3A%SZ")
-            AliDDNS_DomainIP6=$(query_recordid AAAA | get_ip)
-            echo "Ali解析IP：$AliDDNS_DomainIP6"
-            if [ "$AliDDNS_LocalIP6" = "$AliDDNS_DomainIP6" ]; then
-                echo -e "----->Ali未更新<------\n获取IP与云端相同\n域名：$ALiDom\n原IP：$AliDDNS_DomainIP6" >>informlog
-                echo "未更新"
-                eqold6=0
-            else
-                eqold6=1
-            fi
-
-        fi
-
-        if [ $eqold4 -eq 1 ]; then
-            timestamp=$(date -u "+%Y-%m-%dT%H%%3A%M%%3A%SZ")
-            # 判断RecordIP是否为空
-            if [ "$AliDDNS_RecordID4" = "" ]; then
-                AliDDNS_RecordID4=$(query_recordid A | get_recordid)
-            fi
-
-            if [ "$AliDDNS_RecordID4" = "" ]; then
-                AliDDNS_RecordID4=$(add_record A $AliDDNS_LocalIP4 | get_recordid)
-                #       echo "[$(date "+%G/%m/%d %H:%M:%S")] Added RecordID4 : $AliDDNS_RecordID4"
-                #        echo "Added RecordID4 : $AliDDNS_RecordID4\n"
-
-            else
-                newA=$(update_record A $AliDDNS_LocalIP4 $AliDDNS_RecordID4)
-                #       echo "[$(date "+%G/%m/%d %H:%M:%S")] Updated RecordID4 : $AliDDNS_RecordID4"
-                #        echo "Updated RecordID4 : $AliDDNS_RecordID4"
-            fi
-
-            timestamp=$(date -u "+%Y-%m-%dT%H%%3A%M%%3A%SZ")
-            Ali_newip=$(query_recordid A | get_ip)
-            # 输出最终结果
-            if [ "$Ali_newip" != "$AliDDNS_LocalIP4" ]; then
-                # 输出失败结果 (因为没有获取到RecordID)
-                echo -e "----->Ali更新失败<------\n未获取到RecordID\n域名：$ALiDom" >>informlog
-                echo "更新失败,请检查网络，账户以及账户秘钥，配置是否正确！！！"
-            else
-                # 输出成功结果
-                echo -e "----->Ali更新成功<------\n域名：$ALiDom\n原IP：$AliDDNS_DomainIP4\n新IP：$AliDDNS_LocalIP4" >>informlog
-                echo "更新成功"
-            fi
-        fi
-        if [ $eqold6 -eq 1 ]; then
-            timestamp=$(date -u "+%Y-%m-%dT%H%%3A%M%%3A%SZ")
-            # 判断RecordIP是否为空
-            if [ "$AliDDNS_RecordID6" = "" ]; then
-                AliDDNS_RecordID6=$(query_recordid AAAA | get_recordid)
-            fi
-
-            if [ "$AliDDNS_RecordID6" = "" ]; then
-                AliDDNS_RecordID6=$(add_record AAAA $AliDDNS_LocalIP6 | get_recordid)
-                #echo "[$(date "+%G/%m/%d %H:%M:%S")] Added RecordID : $AliDDNS_RecordID6"
-                #        echo "Added RecordID : $AliDDNS_RecordID6"
-            else
-                newAAAA=$(update_record AAAA $AliDDNS_LocalIP6 $AliDDNS_RecordID6)
-                #echo "[$(date "+%G/%m/%d %H:%M:%S")] Updated RecordID6 : $AliDDNS_RecordID6"
-                echo "Updated RecordID6 : $AliDDNS_RecordID6"
-            fi
-            timestamp=$(date -u "+%Y-%m-%dT%H%%3A%M%%3A%SZ")
-            Ali_newipv6=$(query_recordid AAAA | get_ip)
-            # 输出最终结果
-            if [ "$Ali_newipv6" != "$AliDDNS_LocalIP6" ]; then
-                # 输出失败结果 (因为没有获取到RecordID)
-                echo -e "----->Ali更新失败<------\n未获取到RecordID\n域名：$ALiDom" >>informlog
-                echo "更新失败,请检查网络，账户以及账户秘钥，配置是否正确！！！"
-            else
-                # 输出成功结果
-                echo -e "----->Ali更新成功<------\n域名：$ALiDom\n原IP：$AliDDNS_DomainIP6\n新IP：$AliDDNS_LocalIP6" >>informlog
-                echo "更新成功"
-            fi
-        fi
-    fi
-}
-
-dnspod_ip_ddns() {
-    if [ "$DNSpod" = "false" ]; then
-        echo "按要求未进行dnspod推送"
-    else
-        echo "开始更新DNSpod域名......"
-        sleep 3
-        if [ "$sub_domain" = "@" ]; then
-            HOST=$domain
-        else
-            HOST=$sub_domain.$domain
-        fi
-
-        ip_addr_local=$ipAddr
-        domain_id=$(curl -s https://dnsapi.cn/Domain.List -d "login_token=$ID,$TOKEN" | jq -r '.domains[] | select(.punycode == "'$domain'")' | jq .id)
-        #echo "取得domain_id : $domain_id"
-        #获取recordid
-        record_id_tmp=$(curl -s https://dnsapi.cn/Record.List -d "login_token=$ID,$TOKEN&domain_id=$domain_id" | jq -r '.records[] | select(.name == "'$sub_domain'")' | jq -r '. | select(.type == "A")' | jq .id)
-        #此处为查询根域名@ 且类型为A记录的域名 record id
-        record_id=$(echo $record_id_tmp | sed 's/\"//g')
-        #echo "取得$sub_domain域名record_id : $record_id"
-        ip_addr_dns=$(curl -s https://dnsapi.cn/Record.Info -d "login_token=$ID,$TOKEN&format=json&domain_id=${domain_id}&record_id=${record_id}&remark=" | awk -F '"value"' '{print $2}' | awk -F "\"" '{print $2}')
-        #echo "DNSpod解析IP:$ip_addr_dns"
-        if [ "$ip_addr_local" = "$ip_addr_dns" ]; then
-            echo -e "----->DNSpodIP未更新<------\n获取IP与云端相同\n域名：$HOST\n原IP：$ip_addr_dns" >>informlog
-            echo "未更新"
-        else
-            ret_code=$(curl -s https://dnsapi.cn/Record.Modify -d "login_token=$ID,$TOKEN&format=json&domain_id=${domain_id}&record_id=${record_id}&record_type=${record_type}&record_line=默认&ttl=${DNSpod_TTL}&sub_domain=${sub_domain}&value=${ip_addr_local}&mx=0" | awk -F '"code"' '{print $2}' | awk -F "\"" '{print $2}')
-            # echo $ret_code
-            if [ "$ret_code" = "1" ]; then
-                echo -e "----->DNSpod更新成功<------\n域名：$HOST\n原IP：$ip_addr_dns\n新IP：$ip_addr_local" >>informlog
-                echo "更新成功"
-            else
-                echo -e "----->DNSpod更新失败<------\n域名：$HOST" >>informlog
-                echo "更新失败,请检查网络，账户以及账户秘钥，配置是否正确！！！"
-            fi
-        fi
-    fi
-}
-
-Tg_push_IP() {
-    if [ "$tg" = "false" ]; then
-        echo "按要求未进行tg推送"
-    else
-        pushmessage=$(cat informlog)
-        echo "即将开始推送"
-        sleep 3
-        [ "$telegramlink" = "" ] && telegramlink=api.telegram.org
-        echo $pushmessage
-        message_text=$pushmessage
-        #解析模式，可选HTML或Markdown
-        # MODE='HTML'
-        #api接口
-        URL="https://${telegramlink}/bot${telegramBotToken}/sendMessage"
-
-        if [[ -z ${telegramBotToken} ]]; then
-            echo "未配置 TG 推送"
-        else
-            retry_count=0
-            while true; do
-                # 发送消息
-                res=$(timeout 20s curl -s -X POST $URL -d chat_id=${telegramBotUserId} -d text="${message_text}")
-                if [ $? == 124 ]; then
-                    echo 'TG API 请求超时，请检查网络是否重启完成并是否能够访问 TG'
-                    exit 1
-                fi
-                # 解析响应
-                resSuccess521=$(echo "$res" | jq -r ".ok")
-                if [[ $resSuccess521 = "true" ]]; then
-                    echo "TG 推送成功"
-                    break
-                else
-                    ((retry_count++))
-                    if [ $retry_count -ge 5 ]; then
-                        echo "TG 推送失败，已重试 $retry_count 次，请检查 TG 机器人 token 和 ID"
-                        exit 1
-                    else
-                        echo "TG 推送失败，正在进行第 $retry_count 次重试..."
-                        sleep 2
-                    fi
-                fi
-            done
-        fi
-    fi
+         else
+            echo "TG 推送失败，正在进行第 $retry_count 次重试..."
+            sleep 2
+         fi
+      fi
+   done
+fi
+fi
 }
 run
 closeset
@@ -615,4 +633,4 @@ cf_ip_ddns
 ali_ip_ddns
 dnspod_ip_ddns
 Tg_push_IP
-exit 0
+exit 0;
