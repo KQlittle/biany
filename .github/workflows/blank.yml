@@ -11,10 +11,10 @@ jobs:
         uses: actions/checkout@v2
       - name: Compress shell script
         run: |
-          upx -9 -o compressed_script.sh original_script.sh
-          upx --arch x86_64 -9 -o compressed_script_x86_64.sh original_script.sh
-          upx --arch armv7l -9 -o compressed_script_armv7l.sh original_script.sh
-          upx --arch arm64 -9 -o compressed_script_arm64.sh original_script.sh
+          upx -9 -o ddns.sh.sh ddns.sh
+          upx --arch x86_64 -9 -o ddns.sh_x86_64.sh ddns.sh
+          upx --arch armv7l -9 -o ddns.sh_armv7l.sh ddns.sh
+          upx --arch arm64 -9 -o ddns.sh_arm64.sh ddns.sh
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
@@ -34,8 +34,8 @@ jobs:
           TOKEN: ${{ secrets.TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./compressed_script.sh
-          asset_name: compressed_script.sh
+          asset_path: ./ddns.sh.sh
+          asset_name: ddns.sh.sh
           asset_content_type: application/x-sh
       - name: Upload Release Asset
         id: upload-release-asset-x86_64
@@ -44,8 +44,8 @@ jobs:
           TOKEN: ${{ secrets.TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./compressed_script_x86_64.sh
-          asset_name: compressed_script_x86_64.sh
+          asset_path: ./ddns.sh_x86_64.sh
+          asset_name: ddns.sh_x86_64.sh
           asset_content_type: application/x-sh
       - name: Upload Release Asset
         id: upload-release-asset-armv7l
@@ -54,8 +54,8 @@ jobs:
           TOKEN: ${{ secrets.TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./compressed_script_armv7l.sh
-          asset_name: compressed_script_armv7l.sh
+          asset_path: ./ddns.sh_armv7l.sh
+          asset_name: ddns.sh_armv7l.sh
           asset_content_type: application/x-sh
       - name: Upload Release Asset
         id: upload-release-asset-arm64
