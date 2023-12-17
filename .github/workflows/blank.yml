@@ -1,0 +1,82 @@
+name: Build and Release ddns
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build_x86:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+
+    - name: Compile ddns.sh for x86_64
+      run: |
+        chmod +x ddns.sh
+        ./ddns.sh
+        mv ddns ddns_x86_64
+
+  build_arm:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential qemu-user-static docker.io
+
+    - name: Compile ddns.sh for ARM
+      run: |
+        docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+        docker build -t ddns_arm -f Dockerfile.arm .
+        docker run --rm -v $PWD:/workdir ddns_arm
+        mv ddns ddns_arm
+
+  release:
+    needs: [build_x86, build_arm]
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.TOKEN }}
+      with:
+        tag_name: v1.0
+        release_name: Release v1.0
+        body: |
+          Release notes for v1.0
+
+    - name: Upload Release Asset x86_64
+      id: upload_release_asset_x86
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ddns_x86_64
+        asset_name: ddns_x86_64
+        asset_content_type: application/octet-stream
+
+    - name: Upload Release Asset ARM
+      id: upload_release_asset_arm
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ddns_arm
+        asset_name: ddns_arm
+        asset_content_type: application/octet-stream
