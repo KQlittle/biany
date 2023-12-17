@@ -129,6 +129,7 @@ IPbest_txt=""
 #优选IPv4ip网页获取地址如:https://xxxxxxxxxx/ipv4.php
 IPbest_txt2=""
 EOF
+    echo "请修改文件后,重新启动"
     exit 0
 else
     echo "config文件已存在"
