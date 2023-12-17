@@ -17,7 +17,7 @@ jobs:
         run: sudo apt-get install build-essential && chmod +x ddns.sh
       - name: Build for x86/amd64
         if: "${{ matrix.arch == 'amd64' }}"
-        run: gcc ddns.sh -o ddns-linux-amd64
+        run: sh ddns.sh -o ddns-linux-amd64
       - name: Build for armv7l
         if: "${{ matrix.arch == 'armv7l' }}"
         run: |
