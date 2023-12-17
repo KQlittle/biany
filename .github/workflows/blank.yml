@@ -24,7 +24,7 @@ jobs:
         # Your build commands here
         chmod +x ddns.sh
         ./ddns.sh
-        mv ddns ddns_amd64
+        mv ddns.sh ddns_amd64
         env GOARCH=arm64 go build -o ddns_arm64 ddns.sh
         env GOARCH=arm GOARM=7 go build -o ddns_armv7 ddns.sh
 
